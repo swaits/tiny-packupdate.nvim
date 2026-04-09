@@ -1,0 +1,92 @@
+*tiny-packupdate.txt*  Minimal vim.pack updater with progress bar & results picker
+
+Author: Stephen Waits <https://github.com/swaits>
+License: MIT
+
+==============================================================================
+CONTENTS                                          *tiny-packupdate-contents*
+
+  1. Introduction ............................ |tiny-packupdate-introduction|
+  2. Requirements ............................ |tiny-packupdate-requirements|
+  3. Installation ............................ |tiny-packupdate-installation|
+  4. Configuration ........................... |tiny-packupdate-configuration|
+  5. Commands ................................ |tiny-packupdate-commands|
+  6. Highlights .............................. |tiny-packupdate-highlights|
+
+==============================================================================
+1. INTRODUCTION                                *tiny-packupdate-introduction*
+
+tiny-packupdate.nvim is a minimal plugin updater for Neovim 0.12+'s native
+|vim.pack| API. It provides a smooth animated progress bar, commit-level
+changelogs, and an optional snacks.nvim picker for browsing results.
+
+==============================================================================
+2. REQUIREMENTS                                *tiny-packupdate-requirements*
+
+- Neovim >= 0.12 (for |vim.pack| API)
+- Optional: snacks.nvim (https://github.com/folke/snacks.nvim) for picker UI
+
+==============================================================================
+3. INSTALLATION                                *tiny-packupdate-installation*
+
+Add to your |vim.pack.add()| call: >lua
+
+    "https://github.com/swaits/tiny-packupdate.nvim",
+<
+Then in your config: >lua
+
+    require("tiny-packupdate").setup()
+<
+==============================================================================
+4. CONFIGURATION                              *tiny-packupdate-configuration*
+
+                                                  *tiny-packupdate.setup()*
+setup({opts})
+
+    All options shown with defaults: >lua
+
+        require("tiny-packupdate").setup({
+          command = "PackUpdate",  -- user command name
+          auto = "manual",         -- "manual"|"daily"|"weekly"|"monthly"
+          picker = true,           -- use snacks.picker when available
+        })
+<
+    Parameters: ~
+      {opts}  (table|nil) Configuration table
+
+    Fields: ~
+      {command}  (string) Name of the user command. Default: "PackUpdate"
+      {auto}     (string) Auto-update cadence. One of:
+                   "manual"  - no automatic updates (default)
+                   "daily"   - update once per day on startup
+                   "weekly"  - update once per week on startup
+                   "monthly" - update once per month on startup
+      {picker}   (boolean) Use snacks.nvim picker when available.
+                   Set to false to always use the floating markdown fallback.
+                   Default: true
+
+==============================================================================
+5. COMMANDS                                        *tiny-packupdate-commands*
+
+                                                              *:PackUpdate*
+:PackUpdate
+    Update all active plugins via |vim.pack.update()|. Shows a floating
+    progress bar during the update and displays results when complete.
+
+    Only plugins loaded via |vim.pack.add()| in the current session are
+    included. Running this command while an update is already in progress
+    shows a warning.
+
+==============================================================================
+6. HIGHLIGHTS                                    *tiny-packupdate-highlights*
+
+TinyPackProgress                                          *hl-TinyPackProgress*
+    Highlight group for the filled portion of the progress bar.
+    Default: links to |hl-DiagnosticOk|
+
+    Override example: >lua
+
+        vim.api.nvim_set_hl(0, "TinyPackProgress", { fg = "#a6e3a1" })
+<
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
