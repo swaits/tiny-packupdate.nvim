@@ -1,11 +1,9 @@
--- tiny-packupdate.nvim: minimal vim.pack updater with progress bar & results picker
+-- tiny-packupdate.nvim: minimal vim.pack updater with results picker
 -- Requires Neovim 0.12+ (vim.pack API)
 
 local M = {}
 local state = nil -- nil = idle; table = running
 local cfg = { command = "PackUpdate", auto = "manual" }
-local ns = vim.api.nvim_create_namespace("tiny-packupdate")
-local BAR_W = 40
 local LOG_FMT = "--pretty=format:commit %h%nAuthor: %an%nDate:   %cr%n%n    %s%n"
 
 -- ── Timestamp persistence (for auto-update cadence) ───────────────────
@@ -31,70 +29,16 @@ local function write_stamp()
   end
 end
 
--- ── Progress bar UI ───────────────────────────────────────────────────
-
-local function progress_draw()
-  if not state or not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
-    return
-  end
-  local elapsed = (vim.uv.hrtime() - state.t0) / 1e9
-  local pct = state.complete and 1.0 or (0.9 * (1 - math.exp(-elapsed / 5)))
-  local tag = state.changed > 0 and string.format(" %d new ", state.changed) or ""
-  local bw = BAR_W - 2 - #tag
-  local filled = math.floor(pct * bw)
-  local line = " " .. string.rep("█", filled) .. string.rep("░", bw - filled) .. tag
-  vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, { line })
-  vim.api.nvim_buf_clear_namespace(state.buf, ns, 0, -1)
-  if filled > 0 then
-    -- █ is 3 bytes in UTF-8
-    vim.api.nvim_buf_add_highlight(state.buf, ns, "TinyPackProgress", 0, 1, 1 + filled * 3)
-  end
-end
-
-local function progress_open()
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].bufhidden = "wipe"
-  state.buf = buf
-  state.win = vim.api.nvim_open_win(buf, false, {
-    relative = "editor",
-    row = math.floor(vim.o.lines / 3),
-    col = math.floor((vim.o.columns - BAR_W) / 2),
-    width = BAR_W,
-    height = 1,
-    style = "minimal",
-    border = "rounded",
-    title = " " .. cfg.command .. " ",
-    title_pos = "center",
-    noautocmd = true,
-  })
-  state.t0 = vim.uv.hrtime()
-  state.anim = vim.uv.new_timer()
-  state.anim:start(0, 16, vim.schedule_wrap(progress_draw))
-end
-
-local function progress_close()
-  if not state then
-    return
-  end
-  if state.anim then
-    state.anim:stop()
-    state.anim:close()
-    state.anim = nil
-  end
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    vim.api.nvim_win_close(state.win, true)
-  end
-end
-
 -- ── Results display ───────────────────────────────────────────────────
 
 local function show_results(results)
-  progress_close()
   if #results == 0 then
-    vim.notify("All plugins up to date", vim.log.levels.INFO)
+    vim.notify("All plugins already up to date", vim.log.levels.INFO)
     state = nil
     return
   end
+  local n = #results
+  vim.notify(string.format("Updated %d plugin%s", n, n == 1 and "" or "s"), vim.log.levels.INFO)
   local ok, snacks = pcall(require, "snacks")
   if ok and snacks.picker then
     local items = {}
@@ -216,15 +160,6 @@ local function collect_and_show()
   end
 end
 
--- ── Completion detection ──────────────────────────────────────────────
-
-local function on_complete()
-  write_stamp()
-  state.complete = true
-  progress_draw()
-  vim.defer_fn(collect_and_show, 400)
-end
-
 -- ── Main update ───────────────────────────────────────────────────────
 
 function M.update()
@@ -243,36 +178,31 @@ function M.update()
     return vim.notify("No active plugins", vim.log.levels.INFO)
   end
 
-  state = { snapshot = snapshot, total = #names, changed = 0 }
-  progress_open()
+  state = { snapshot = snapshot, changed = 0 }
 
   local timer = vim.uv.new_timer()
   local au_id
-  local function reset_debounce()
-    timer:stop()
-    timer:start(
-      2000,
-      0,
-      vim.schedule_wrap(function()
-        pcall(vim.api.nvim_del_autocmd, au_id)
-        timer:close()
-        on_complete()
-      end)
-    )
+  local function on_done()
+    pcall(vim.api.nvim_del_autocmd, au_id)
+    timer:close()
+    write_stamp()
+    collect_and_show()
   end
 
   au_id = vim.api.nvim_create_autocmd("PackChanged", {
-    callback = function()
+    callback = function(ev)
       if not state then
         return pcall(vim.api.nvim_del_autocmd, au_id)
       end
       state.changed = state.changed + 1
-      progress_draw()
-      reset_debounce()
+      local name = ev.data and ev.data.spec and ev.data.spec.name or "plugin"
+      vim.notify(string.format("Updated %s (%d)", name, state.changed), vim.log.levels.INFO)
+      timer:stop()
+      timer:start(2000, 0, vim.schedule_wrap(on_done))
     end,
   })
 
-  reset_debounce()
+  timer:start(2000, 0, vim.schedule_wrap(on_done))
   vim.pack.update(names, { force = true })
 end
 
@@ -281,7 +211,6 @@ end
 function M.setup(opts)
   vim.g.tiny_packupdate_loaded = true
   cfg = vim.tbl_extend("force", cfg, opts or {})
-  vim.api.nvim_set_hl(0, "TinyPackProgress", { default = true, link = "DiagnosticOk" })
   vim.api.nvim_create_user_command(cfg.command, M.update, { desc = "Update all plugins" })
   local interval = auto_intervals[cfg.auto]
   if interval and os.time() - read_stamp() >= interval then
