@@ -54,7 +54,19 @@ local function show_results(results)
       title = cfg.command .. " Results",
       items = items,
       preview = "preview",
-      layout = { preset = "ivy" },
+      layout = {
+        hidden = { "input" },
+        layout = {
+          box = "horizontal",
+          width = 0.9,
+          height = 0.9,
+          border = "rounded",
+          title = "{title}",
+          title_pos = "center",
+          { win = "list", border = "none", width = 0.3 },
+          { win = "preview", title = "{preview}", border = "left", width = 0.7 },
+        },
+      },
       format = function(item)
         return { { item.text } }
       end,
